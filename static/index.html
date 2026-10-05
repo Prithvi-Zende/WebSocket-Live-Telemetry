@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arduino Sensor Feed &bull; Socket.IO Live Telemetry</title>
+  <meta name="description" content="Live hardware telemetry receiver feed matching the Frontend Workflow & Receiver Integration Guide with Socket.IO and offline mocking.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Socket.IO Client Library -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body class="dark-theme">
+  <div class="dashboard-wrapper">
+    <!-- Top Header -->
+    <header class="app-header" id="mainHeader">
+      <div class="brand-section">
+        <div class="brand-icon">
+          <div class="pulse-ring"></div>
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="3" stroke="#00f2fe" fill="#00f2fe15"/>
+            <circle cx="7" cy="9" r="1.5" fill="#00f2fe"/>
+            <circle cx="7" cy="15" r="1.5" fill="#00f2fe"/>
+            <line x1="12" y1="8" x2="18" y2="8" stroke="#38ef7d"/>
+            <line x1="12" y1="12" x2="18" y2="12" stroke="#38ef7d"/>
+            <line x1="12" y1="16" x2="16" y2="16" stroke="#38ef7d"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">ARDUINO SENSOR TELEMETRY</h1>
+          <p class="brand-subtitle">Frontend Workflow &bull; Socket.IO 'sensor_update' Live Receiver</p>
+        </div>
+      </div>
+
+      <!-- IP Handshake & Connection Status -->
+      <div class="status-pills">
+        <div class="status-pill" id="sourceModePill">
+          <span class="status-dot green pulse" id="sourceDot"></span>
+          <span class="pill-label">FEED SOURCE:</span>
+          <span class="pill-badge" id="sourceModeBadge">SOCKET.IO LIVE</span>
+        </div>
+        <div class="status-pill" id="ipPill">
+          <span class="status-dot cyan" id="ipDot"></span>
+          <span class="pill-label">TRANSMITTER IP:</span>
+          <span class="pill-badge" id="ipBadge">http://127.0.0.1:5000</span>
+        </div>
+        <div class="status-pill" id="eventPill">
+          <span class="pill-label">EVENT:</span>
+          <span class="pill-badge">'sensor_update'</span>
+        </div>
+      </div>
+
+      <!-- Header Mode Controls -->
+      <div class="header-actions">
+        <!-- Section 3: Offline Mocking Toggle -->
+        <button class="btn btn-outline" id="toggleMockBtn" title="Switch between Live Socket.IO and Section 3 Offline Mock Generator">
+          <span id="mockIcon">🧪</span> <span id="mockBtnText">Switch to Offline Mock</span>
+        </button>
+        <button class="btn btn-outline" id="configIpBtn" title="Configure Transmitter IP Handshake">
+          <span>⚙️</span> Config IP
+        </button>
+      </div>
+    </header>
+
+    <!-- IP Handshake Banner (Section 2 of Guide) -->
+    <div class="handshake-banner" id="handshakeBanner" style="display: none;">
+      <div class="handshake-form">
+        <span class="handshake-label">🌐 Transmitter IP Handshake:</span>
+        <input type="text" id="transmitterIpInput" placeholder="http://192.168.1.100:5000" class="ip-input">
+        <button class="btn btn-primary" id="saveIpBtn">Connect to IP</button>
+        <button class="btn btn-outline" id="closeIpBannerBtn">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Exact 4 Sensors HUD Grid (Section 1 & 2 of Guide) -->
+    <main class="telemetry-grid">
+      <!-- Sensor 1: Ultrasonic Distance -->
+      <div class="kpi-card" id="cardDistance">
+        <div class="card-header">
+          <span class="card-tag">ULTRASONIC SENSOR (HC-SR04)</span>
+          <span class="card-status normal" id="distStatus">CLEAR</span>
+        </div>
+        <div class="card-body gauge-body">
+          <div class="radar-visualizer">
+            <div class="radar-sweep"></div>
+            <div class="radar-blip" id="radarBlip"></div>
+            <div class="radar-circles">
+              <span class="rc r1"></span>
+              <span class="rc r2"></span>
+              <span class="rc r3"></span>
+            </div>
+          </div>
+          <div class="gauge-details">
+            <span class="d-label">Target Distance:</span>
+            <!-- EXACT ID FROM INTEGRATION GUIDE -->
+            <div class="primary-metric-val" id="out-distance">-- cm</div>
+            <div class="metric-track">
+              <div class="metric-fill dist-fill" id="barDistance" style="width: 45%;"></div>
+            </div>
+            <span class="d-sub">Range: 10 cm to 110 cm</span>
+          </div>
+        </div>
+        <div class="card-footer-metric">
+          <span class="sub-label">Sonic Echo Proximity</span>
+          <span class="trend-indicator cyan">&bull; Active Radar</span>
+        </div>
+      </div>
+
+      <!-- Sensor 2: Gas Concentration -->
+      <div class="kpi-card" id="cardGas">
+        <div class="card-header">
+          <span class="card-tag">GAS / AIR QUALITY (MQ SENSOR)</span>
+          <span class="card-status normal" id="gasStatus">SAFE</span>
+        </div>
+        <div class="card-body gauge-body">
+          <div class="gas-circle-wrap">
+            <svg class="radial-svg" viewBox="0 0 120 120">
+              <circle class="radial-bg" cx="60" cy="60" r="48" />
+              <circle class="radial-fill gas" id="gasRadialCircle" cx="60" cy="60" r="48" />
+            </svg>
+            <div class="gauge-center-text">
+              <!-- EXACT ID FROM INTEGRATION GUIDE -->
+              <span class="gauge-main-val" id="out-gas">--</span>
+              <span class="gauge-unit">PPM</span>
+            </div>
+          </div>
+          <div class="gauge-details">
+            <span class="d-label">Gas Concentration:</span>
+            <div class="gas-threshold-pills">
+              <span class="thresh-pill active" id="pillSafe">Safe (&lt;450)</span>
+              <span class="thresh-pill" id="pillWarn">Moderate</span>
+              <span class="thresh-pill" id="pillHazard">Hazard (&gt;600)</span>
+            </div>
+            <span class="d-sub">Calibrated: 200 to 700 ppm</span>
+          </div>
+        </div>
+        <div class="card-footer-metric">
+          <span class="sub-label">Combustible Gas & Smoke</span>
+          <span class="trend-indicator green" id="gasTrend">&bull; Clean Atmosphere</span>
+        </div>
+      </div>
+
+      <!-- Sensor 3: Capacitive Touch -->
+      <div class="kpi-card" id="cardTouch">
+        <div class="card-header">
+          <span class="card-tag">CAPACITIVE TOUCH SENSOR (TTP223)</span>
+          <span class="card-status normal" id="touchCardStatus">CLEAR</span>
+        </div>
+        <div class="card-body touch-body">
+          <div class="touch-pad-visual" id="touchPadVisual">
+            <div class="fingerprint-icon">
+              <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 2a9 9 0 0 0-9 9c0 3.3 1.8 6.2 4.5 7.8M12 2a9 9 0 0 1 9 9c0 3.3-1.8 6.2-4.5 7.8M12 6a5 5 0 0 0-5 5c0 1.8 1 3.4 2.5 4.3M12 6a5 5 0 0 1 5 5c0 1.8-1 3.4-2.5 4.3M12 10a1 1 0 0 0-1 1v7M12 10a1 1 0 0 1 1 1v7"/>
+              </svg>
+            </div>
+            <div class="touch-ripple" id="touchRipple"></div>
+          </div>
+          <div class="touch-details">
+            <span class="d-label">Sensor State:</span>
+            <!-- EXACT ID FROM INTEGRATION GUIDE -->
+            <div class="primary-metric-val state-val" id="out-touch">CLEAR</div>
+            <span class="d-sub">Digital IO Pin &bull; Tactile Contact</span>
+          </div>
+        </div>
+        <div class="card-footer-metric">
+          <span class="sub-label">Contact Threshold: 15 pF</span>
+          <span class="trend-indicator" id="touchIndicatorText">&bull; Standby</span>
+        </div>
+      </div>
+
+      <!-- Sensor 4: Tactile Pushbutton -->
+      <div class="kpi-card" id="cardButton">
+        <div class="card-header">
+          <span class="card-tag">DIGITAL PUSHBUTTON (GPIO)</span>
+          <span class="card-status normal" id="btnCardStatus">RELEASED</span>
+        </div>
+        <div class="card-body button-body">
+          <div class="hardware-button-wrap">
+            <div class="physical-btn-cap" id="physicalBtnCap">
+              <div class="btn-top-ring"></div>
+              <span>SW1</span>
+            </div>
+          </div>
+          <div class="button-details">
+            <span class="d-label">Switch Condition:</span>
+            <!-- EXACT ID FROM INTEGRATION GUIDE -->
+            <div class="primary-metric-val state-val" id="out-button">RELEASED</div>
+            <span class="d-sub">Pullup Resistor Active</span>
+          </div>
+        </div>
+        <div class="card-footer-metric">
+          <span class="sub-label">Microswitch Interrupt</span>
+          <span class="trend-indicator" id="buttonIndicatorText">&bull; Ready</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Real-time Multi-Channel Oscilloscope -->
+    <section class="chart-section" id="chartSection">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2 class="section-title">Live Sensor Waveform Trends</h2>
+          <span class="section-subtitle">Real-time canvas oscilloscope streaming Distance (cm) & Gas (ppm)</span>
+        </div>
+        <div class="chart-controls">
+          <div class="channel-toggles">
+            <button class="channel-btn active" data-channel="both" id="btnChanBoth">Distance & Gas</button>
+            <button class="channel-btn" data-channel="distance" id="btnChanDist">Distance</button>
+            <button class="channel-btn" data-channel="gas" id="btnChanGas">Gas PPM</button>
+          </div>
+          <div class="time-toggles">
+            <button class="time-btn active" data-window="30">30s</button>
+            <button class="time-btn" data-window="60">60s</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-container" id="canvasContainer">
+        <canvas id="liveChartCanvas" width="1200" height="260"></canvas>
+        <div class="canvas-legend">
+          <span class="legend-item"><span class="legend-color" style="background:#00f2fe;"></span> Distance (cm)</span>
+          <span class="legend-item"><span class="legend-color" style="background:#ff7675;"></span> Gas (ppm / 10)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dual Panel: Live Arduino Serial Monitor & Hardware Command Injections -->
+    <section class="console-section" id="consoleSection">
+      <!-- Left Column: Live Arduino Serial Monitor -->
+      <div class="terminal-panel" id="serialTerminalPanel">
+        <div class="terminal-header">
+          <div class="term-title-wrap">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green"></div>
+            <span class="term-title">ARDUINO SERIAL MONITOR (COM / UART STREAM)</span>
+          </div>
+          <div class="term-tools">
+            <label class="term-check-label">
+              <input type="checkbox" id="autoscrollCheck" checked> Auto-Scroll
+            </label>
+            <label class="term-check-label">
+              <input type="checkbox" id="timestampsCheck" checked> Timestamps
+            </label>
+            <button class="btn btn-xs" id="clearTerminalBtn">Clear</button>
+            <button class="btn btn-xs" id="copyTerminalBtn">Copy</button>
+          </div>
+        </div>
+
+        <div class="terminal-body" id="serialTerminalBody">
+          <div class="term-line system">[SYSTEM] Socket.IO Live Telemetry Feed Initialized.</div>
+          <div class="term-line system">[SYSTEM] Listening for 'sensor_update' broadcast events...</div>
+        </div>
+
+        <div class="terminal-footer">
+          <span class="term-stat" id="termLineCount">Lines: 2</span>
+          <span class="term-stat" id="termBytesCount">Bytes: 110 B</span>
+          <span class="term-stat" id="termFormat">Payload: JSON</span>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Hardware Control Deck -->
+      <div class="controls-panel" id="controlsPanel">
+        <div class="panel-header">
+          <h3 class="panel-title">Interactive Sensor Injections</h3>
+          <span class="panel-badge">DOWNLINK COMMANDS</span>
+        </div>
+
+        <p class="panel-desc">Test real-time UI reactions by injecting simulated sensor events down to the Arduino Uno:</p>
+
+        <div class="action-grid">
+          <button class="action-card touch" id="btnInjectTouch" title="Simulates a finger touching the TTP223 capacitive pad">
+            <div class="act-icon">👆</div>
+            <div class="act-text">
+              <span class="act-title">Trigger Touch Event</span>
+              <span class="act-sub">Set state to "TOUCHED"</span>
+            </div>
+          </button>
+
+          <button class="action-card btn-act" id="btnInjectButton" title="Simulates a physical button press on the Arduino">
+            <div class="act-icon">🔘</div>
+            <div class="act-text">
+              <span class="act-title">Press Pushbutton</span>
+              <span class="act-sub">Set state to "PRESSED"</span>
+            </div>
+          </button>
+
+          <button class="action-card gas-act" id="btnInjectGas" title="Simulates sudden gas concentration spike (+300 ppm)">
+            <div class="act-icon">💨</div>
+            <div class="act-text">
+              <span class="act-title">Simulate Gas Leak</span>
+              <span class="act-sub">+300 ppm surge</span>
+            </div>
+          </button>
+
+          <button class="action-card dist-act" id="btnInjectObstacle" title="Simulates an obstacle moving close to ultrasonic sensor">
+            <div class="act-icon">🛑</div>
+            <div class="act-text">
+              <span class="act-title">Close Obstacle</span>
+              <span class="act-sub">Distance drops to 12 cm</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- Custom Command Prompt -->
+        <div class="custom-cmd-wrap">
+          <span class="cmd-label">Custom Command (downlink to Arduino serial):</span>
+          <div class="cmd-input-group">
+            <input type="text" id="customCmdInput" placeholder="e.g. TOUCH, PRESS, GAS, NEAR, PING" autocomplete="off">
+            <button class="btn btn-primary" id="sendCmdBtn">Send</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Arduino Uno Sensor Telemetry &bull; Socket.IO Live Feed & Offline Mock Support</span>
+      <span id="footerUptime">Feed Uptime: 00:00:00</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
